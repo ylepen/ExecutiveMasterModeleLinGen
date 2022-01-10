@@ -1,0 +1,259 @@
+---
+title: "Modèle Linéaire Généralisé"
+author: "Yannick Le Pen"
+output:
+  pdf_document:  default
+  html_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 1. Introduction
+
+Nous disposons de données quotidiennes sur la pluviométrie à Bâle sur une période de 8 ans (1180 dates). Nous cherchons un modèle pour la variable dichotomique ``pluie.demain'' qui prend les valeurs ``FALSE'' ou ``TRUE" dans la famille des modèles Logit ou probit. 
+
+Afin de modéliser l'occurrence de la pluie, nous disposons de 40 variables classées en les catégories suivantes :
+
+1. Température quotidienne
+2. Humidité relative
+3. Pression atmosphérique
+4. Nébulosité
+5. Vent : vitesse et direction à différentes altitudes
+6. Rafales de vent
+Pour chacune de ces variables, on dispose de la moyenne, du maximum et du minimum quotidien. On dispose aussi de quatre autres variables :
+7. Précipitations
+8. Neige
+9. Ensoleillement
+10. Rayonnement solaire.
+
+Nous disposons d'un total de 40 variables explicatives, néanmoins celles-ci présentent certainement des niveaux de corrélation positive ou négatives. Elles contiennent donc très certainement des informations redondantes.
+
+# 2. Données
+
+Nous importons les données et écartons les données relatives à la date (années, mois, heures, minutes).  L'ensemble des variables explicatives potentielles sont des variables quantitatives continues. 
+
+
+Afin d'évaluer quelles variables auraient un pouvoir explicatif, nous représentons ci-dessous les boxplot de la variable pluie.demain avec une sélection de celles-ci.
+
+```{r echo=FALSE}
+setwd("~/executive_master_big_data/lineaire_generalise/projet")
+
+# 1 nettoyage espace de travail
+rm(list=ls())
+
+
+# importation des data
+
+data_train=read.csv("meteo.train.csv")
+d=data_train[,7:47]
+```
+
+```{r, echo=FALSE}
+
+res<-cor(d)
+
+#table(res)
+
+```
+
+
+
+
+```{r fig1, fig.height=3,fig.width=3,echo=FALSE}
+boxplot(data_train$Temperature.daily.mean..2.m.above.gnd.~data_train$pluie.demain)
+boxplot(data_train$Relative.Humidity.daily.mean..2.m.above.gnd.~data_train$pluie.demain)
+boxplot(data_train$Mean.Sea.Level.Pressure.daily.mean..MSL.~data_train$pluie.demain)
+boxplot(data_train$Total.Cloud.Cover.daily.mean..sfc.~data_train$pluie.demain)
+boxplot(data_train$Wind.Speed.daily.max..10.m.above.gnd.~data_train$pluie.demain)
+```
+
+Nous pouvons tirer les enseignements suivants de ces graphiques :
+
+1. les niveaux de température quotidienne moyenne sont très similaires les jours avec et sans pluie.
+2. le niveau  d'humidité atteint des valeurs plus basses en cas de pluie le lendemain.
+3. la pression atmosphérique est plus basse en moyenne les jours de pluie. Néanmoins, il y a beaucoup de valeurs extrêmes hautes et basses les jours avec pluie et sans pluie.
+4. la couverture nuageuse est plus importante en cas de pluie, ce qui n'a rien d'étonnant
+5. la vitesse moyenne du vent atteint des niveaux plus élevé en cas de pluie. On peut donc en déduire que le maximum de la vitesse pourrait être un meilleur prédicteur que la vitesse moyenne
+  
+
+\newpage
+
+## 3. Recherche d'un modèle
+
+### 3.1 Modèle de départ avec les moyennes quotidiennes
+Nous commençons par un modèle logit où nous choisissons comme variables explicatives les valeurs moyennes quotidiennes de variables extraites des grandes catégories mentionnées en introduction :
+
+1. température
+2. humidité
+3. pression atmosphérique
+3. couverture nuageuse
+4. vitesse du vent
+
+
+```{r, echo=FALSE}
+# configuration de départ
+G1 =glm(pluie.demain~d$Temperature.daily.mean..2.m.above.gnd.+d$Relative.Humidity.daily.mean..2.m.above.gnd.+d$Mean.Sea.Level.Pressure.daily.mean..MSL.+d$Total.Cloud.Cover.daily.mean..sfc.+d$Wind.Speed.daily.mean..10.m.above.gnd.,family=binomial,data = d)
+summary(G1)
+```
+
+```{r, echo=FALSE}
+# configuration de départ
+G1L =glm(pluie.demain~d$Temperature.daily.mean..2.m.above.gnd.+d$Relative.Humidity.daily.mean..2.m.above.gnd.+d$Mean.Sea.Level.Pressure.daily.mean..MSL.+d$Total.Cloud.Cover.daily.mean..sfc.+d$Wind.Speed.daily.mean..10.m.above.gnd.,family=binomial(link=probit),data = d)
+summary(G1L)
+```
+
+
+Nous pouvons remarquer que toutes les variables sont significatives pour un risque de première espèce de 1%, à l'exception du niveau moyen d'humidité. La température moyenne, la couverture nuageuse, la vitesse du vent ont un effet positif sur la probabilité de la pluie. La pression atmosphérique exerce un effet négatif. Ces résultats sont en accord avec les conclusions tirées de l'étude des boxplots. 
+
+
+### 3.2 Etude de l'impact du niveau d'humidité
+
+Dans cette deuxième spécification, nous avons remplacé le niveau moyen d'humidité par son niveau minimum. Nous observons que cette variable a un coefficient négatif et significatif à 5%. Le critère AIC a diminué, de même que la Residual deviance.
+
+
+```{r, echo=FALSE}
+# configuration de départ
+G2 =glm(pluie.demain~d$Temperature.daily.mean..2.m.above.gnd.+d$Relative.Humidity.daily.min..2.m.above.gnd.+d$Mean.Sea.Level.Pressure.daily.mean..MSL.+d$Total.Cloud.Cover.daily.mean..sfc.+d$Wind.Speed.daily.mean..10.m.above.gnd.,family=binomial,data = d)
+summary(G2)
+```
+Nous ajoutons les précipitations totales à la spécification précédente. Cette variable n'est pas significative et ne fait pas disparaitre la significativité du niveau d'humidité, bien que ces variables soient corrélées.
+
+```{r, echo=FALSE}
+# 
+G3 =glm(pluie.demain~d$Temperature.daily.mean..2.m.above.gnd.+d$Relative.Humidity.daily.min..2.m.above.gnd.+d$Total.Precipitation.daily.sum..sfc.+d$Mean.Sea.Level.Pressure.daily.mean..MSL.+d$Total.Cloud.Cover.daily.mean..sfc.+d$Wind.Speed.daily.mean..10.m.above.gnd.,family=binomial,data = d)
+summary(G3)
+```
+
+
+Nous avons vérifié que précipitations totales n'est pas significatif, même en l'absence du degré d'humidité minimum (resultats non reportés )
+
+```{r,echo=FALSE, results='hide'}
+# 
+G3 =glm(pluie.demain~d$Temperature.daily.mean..2.m.above.gnd.+d$Total.Precipitation.daily.sum..sfc.+d$Mean.Sea.Level.Pressure.daily.mean..MSL.+d$Total.Cloud.Cover.daily.mean..sfc.+d$Wind.Speed.daily.mean..10.m.above.gnd.,family=binomial,data = d)
+summary(G3)
+```
+```{r,echo=FALSE, results='hide'}
+# configuration de départ
+G4 =glm(pluie.demain~d$Temperature.daily.mean..2.m.above.gnd.+d$Relative.Humidity.daily.min..2.m.above.gnd.+d$Snowfall.amount.raw.daily.sum..sfc.+d$Mean.Sea.Level.Pressure.daily.mean..MSL.+d$Total.Cloud.Cover.daily.mean..sfc.+d$Wind.Speed.daily.mean..10.m.above.gnd.,family=binomial,data = d)
+summary(G4)
+```
+
+```{r,echo=FALSE, results='hide'}
+# configuration de départ
+G5 =glm(pluie.demain~d$Temperature.daily.mean..2.m.above.gnd.+d$Relative.Humidity.daily.min..2.m.above.gnd.+d$Sunshine.Duration.daily.sum..sfc.+d$Mean.Sea.Level.Pressure.daily.mean..MSL.+d$Total.Cloud.Cover.daily.mean..sfc.+d$Wind.Speed.daily.mean..10.m.above.gnd.,family=binomial,data = d)
+summary(G5)
+```
+
+```{r,echo=FALSE, results='hide'}
+# configuration de départ
+G6 =glm(pluie.demain~d$Temperature.daily.mean..2.m.above.gnd.+d$Shortwave.Radiation.daily.sum..sfc.+d$Mean.Sea.Level.Pressure.daily.mean..MSL.+d$Total.Cloud.Cover.daily.mean..sfc.+d$Wind.Speed.daily.mean..10.m.above.gnd.,family=binomial,data = d)
+summary(G6)
+```
+
+De même, nous vérifions que les variables chute de neige, durée d'ensoleillement et rayonnement solaire ne sont pas significatifs lorsque nous les incluons dans notre modèle. Aucune de ces variables n'a d'impact sur la significativité des autres. 
+
+### 3.3 Etude de la variable température
+
+Nous cherchons à améliorer la spécification du modèle en faisant varier en considérant les niveaux de température maximum et minimum. Nous observons que le niveau de température maximum est significatif avec un signe positif et qu'il permet de réduire la valeur du critère AIC et de la residual deviance. Par contre, le niveau minimum d'humidité n'est plus significatif qu'à 10%.
+
+```{r,echo=FALSE}
+# 
+
+G7 =glm(pluie.demain~d$Temperature.daily.max..2.m.above.gnd.+d$Relative.Humidity.daily.min..2.m.above.gnd.+d$Mean.Sea.Level.Pressure.daily.mean..MSL.+d$Total.Cloud.Cover.daily.mean..sfc.+d$Wind.Speed.daily.mean..10.m.above.gnd.,family=binomial,data = d)
+summary(G7)
+```
+```{r,echo=FALSE,results='hide'}
+# 
+
+G8 =glm(pluie.demain~d$Temperature.daily.min..2.m.above.gnd.+d$Relative.Humidity.daily.min..2.m.above.gnd.+d$Mean.Sea.Level.Pressure.daily.mean..MSL.+d$Total.Cloud.Cover.daily.mean..sfc.+d$Wind.Speed.daily.mean..10.m.above.gnd.,family=binomial,data = d)
+summary(G8)
+```
+Nous observons que le niveau minimal de température est significatif mais que le critère AIC et la residual deviation sont plus elevés et écartons ce modèle (résultat non reporté dans le fichier pdf). En considérant une spécification avec le niveau minimal et le niveau maximal de température, nous voyons que seul le niveau maximal reste significatif (résultat non reporté dans le fichier pdf).
+
+```{r,echo=FALSE, results='hide'}
+# 
+
+G9 =glm(pluie.demain~d$Temperature.daily.min..2.m.above.gnd.+d$Temperature.daily.max..2.m.above.gnd.+d$Relative.Humidity.daily.min..2.m.above.gnd.+d$Mean.Sea.Level.Pressure.daily.mean..MSL.+d$Total.Cloud.Cover.daily.mean..sfc.+d$Wind.Speed.daily.mean..10.m.above.gnd.,family=binomial,data = d)
+summary(G9)
+```
+### 3.4 Etude des variables relatives au vent
+
+Nous considérons les valeurs maximales et minimales de la vitesse du vent pour les différentes altitudes. Nous observons que la vitesse maximale à 80 m est significative avec un coefficient positif et qu'elle abaisse notablement le critère AIC et la residual deviance. On peut remarquer toutefois que la probabilité critique du niveau d'humidité est de 10,5%.
+
+```{r,echo=FALSE}
+# 
+
+G10 =glm(pluie.demain~d$Temperature.daily.max..2.m.above.gnd.+d$Relative.Humidity.daily.min..2.m.above.gnd.+d$Mean.Sea.Level.Pressure.daily.mean..MSL.+d$Total.Cloud.Cover.daily.mean..sfc.+d$Wind.Speed.daily.max..80.m.above.gnd.,family=binomial,data = d)
+summary(G10)
+```
+
+```{r,echo=FALSE,results='hide'}
+# 
+
+G11 =glm(pluie.demain~d$Temperature.daily.max..2.m.above.gnd.+d$Relative.Humidity.daily.min..2.m.above.gnd.+d$Mean.Sea.Level.Pressure.daily.mean..MSL.+d$Total.Cloud.Cover.daily.mean..sfc.+d$Wind.Direction.daily.mean..80.m.above.gnd.,family=binomial,data = d)
+summary(G11)
+```
+Les variables relatives à la direction du vent ne sont pas significatives (résultats non affichés dans le fichier pdf). La variable vitesse maximale des rafales de vent permet d'avoir une spécification plus précise en abaissant le critère AIC et la déviance résiduelle. Toutefois, la variable humidité minimum voit sa probabilité critique égale à 11,8%. De ce fait, nous choisissons d'exclure cette variable pour la spécification finale utilisée pour les prévisions.
+
+
+```{r,echo=FALSE}
+# 
+
+G12 =glm(pluie.demain~d$Temperature.daily.max..2.m.above.gnd.+d$Relative.Humidity.daily.min..2.m.above.gnd.+d$Mean.Sea.Level.Pressure.daily.mean..MSL.+d$Total.Cloud.Cover.daily.mean..sfc.+d$Wind.Gust.daily.max..sfc.,family=binomial,data = d)
+summary(G12)
+```
+
+### 3.5 Etude des variables relatives à la couverture nuageuse
+
+Nous verifions différentes spécifications en faisant varier la variable mesurant la couverture nuageuse. Les valeurs maximales n'améliorent pas le modèle et les différentes altitudes non plus. De ce fait nous ne reportons pas ces estimations dans le document pdf.
+
+```{r,echo=FALSE,results='hide'}
+# 
+
+G13 =glm(pluie.demain~d$Temperature.daily.max..2.m.above.gnd.+d$Relative.Humidity.daily.min..2.m.above.gnd.+d$Mean.Sea.Level.Pressure.daily.mean..MSL.+d$Total.Cloud.Cover.daily.max..sfc.+d$Wind.Gust.daily.max..sfc.,family=binomial,data = d)
+summary(G13)
+```
+
+```{r,echo=FALSE,results='hide'}
+# 
+
+G14 =glm(pluie.demain~d$Temperature.daily.max..2.m.above.gnd.+d$Relative.Humidity.daily.min..2.m.above.gnd.+d$Mean.Sea.Level.Pressure.daily.mean..MSL.+d$High.Cloud.Cover.daily.mean..high.cld.lay.+d$Wind.Gust.daily.max..sfc.,family=binomial,data = d)
+summary(G14)
+```
+```{r,echo=FALSE,results='hide'}
+# 
+
+G15 =glm(pluie.demain~d$Temperature.daily.max..2.m.above.gnd.+d$Mean.Sea.Level.Pressure.daily.mean..MSL.+d$Low.Cloud.Cover.daily.mean..low.cld.lay.+d$Wind.Gust.daily.max..sfc.,family=binomial,data = d)
+summary(G15)
+```
+\newpage
+
+# 4. Modèle final et calcul des prévisions
+Nous retenons comme modèle final :
+```{r echo=FALSE}
+G16 =glm(pluie.demain~Temperature.daily.max..2.m.above.gnd.+Mean.Sea.Level.Pressure.daily.mean..MSL.+Total.Cloud.Cover.daily.mean..sfc.+Wind.Gust.daily.max..sfc.,family=binomial,data=d)
+summary(G16)
+```
+
+Nous pouvons noter malheureusement que la deviance résiduelle de ce modèle est trop élevée et conduirait à un rejet de celui-ci dans le test contre modèle saturé. L'adéquation du modèle aux données n'est donc pas très satisfaisante et la qualité des prévisions ne sera pas très bonne. 
+
+
+
+
+```{r}
+data_test=read.csv("meteo.test.csv")
+
+
+xnew = data_test[,c("Temperature.daily.max..2.m.above.gnd.","Mean.Sea.Level.Pressure.daily.mean..MSL.", "Total.Cloud.Cover.daily.mean..sfc.","Wind.Gust.daily.max..sfc.") ]
+
+
+p.validate=predict(G16,xnew,type='response',se.fit=T)
+
+#prevision de la pluie
+forecast_rain=p.validate$fit>0.5
+
+
+write.csv(forecast_rain,"forecast_YLEPEN.csv")
